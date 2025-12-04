@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../models/task_model.dart'; // Ensure path is correct
+import '../../models/task_model.dart';
 
 class EditTaskSheet extends StatefulWidget {
   final Task task;
@@ -33,14 +33,12 @@ class _EditTaskSheetState extends State<EditTaskSheet> {
   @override
   void initState() {
     super.initState();
-    // Pre-fill data from the existing task
     _titleController = TextEditingController(text: widget.task.title);
     _descController = TextEditingController(text: widget.task.description);
     _deadline = widget.task.deadline;
     _reminder = widget.task.reminder;
   }
 
-  // --- 1. LOGIC GATE (Same as Add Sheet) ---
   void _validateLogic() {
     setState(() {
       if (_reminder != null && _reminder!.isAfter(_deadline)) {
@@ -51,7 +49,6 @@ class _EditTaskSheetState extends State<EditTaskSheet> {
     });
   }
 
-  // --- 2. DATE PICKERS ---
   Future<void> _pickDateTime(bool isDeadline) async {
     final now = DateTime.now();
     final initialDate = isDeadline ? _deadline : (_reminder ?? now);
@@ -59,7 +56,7 @@ class _EditTaskSheetState extends State<EditTaskSheet> {
     final date = await showDatePicker(
       context: context,
       initialDate: initialDate,
-      firstDate: DateTime(2020), // Allow editing past tasks?
+      firstDate: DateTime(2020),
       lastDate: DateTime(2100),
       builder: (context, child) {
         return Theme(
@@ -74,9 +71,18 @@ class _EditTaskSheetState extends State<EditTaskSheet> {
     if (date == null) return;
 
     if (!mounted) return;
+    
     final time = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(initialDate),
+      builder: (context, child) {
+         return Theme(
+            data: ThemeData.light().copyWith(
+              colorScheme: ColorScheme.light(primary: widget.roleColor),
+            ),
+            child: child!,
+        );
+      },
     );
 
     if (time == null) return;
@@ -94,7 +100,6 @@ class _EditTaskSheetState extends State<EditTaskSheet> {
     _validateLogic();
   }
 
-  // --- 3. UPDATE FUNCTION ---
   Future<void> _updateTask() async {
     if (_titleController.text.trim().isEmpty) return;
     if (_logicError != null) return;
@@ -104,7 +109,7 @@ class _EditTaskSheetState extends State<EditTaskSheet> {
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
       
-      // Update the specific document using widget.task.id
+      // Update Firestore ONLY
       await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
@@ -117,7 +122,6 @@ class _EditTaskSheetState extends State<EditTaskSheet> {
         'description': _descController.text.trim(),
         'deadline': Timestamp.fromDate(_deadline),
         'reminder': _reminder != null ? Timestamp.fromDate(_reminder!) : null,
-        // We don't change createdAt or isCompleted here usually
       });
 
       if (mounted) Navigator.pop(context); 
@@ -129,7 +133,6 @@ class _EditTaskSheetState extends State<EditTaskSheet> {
     }
   }
 
-  // --- 4. DELETE FUNCTION ---
   Future<void> _deleteTask() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -149,6 +152,8 @@ class _EditTaskSheetState extends State<EditTaskSheet> {
     
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
+      
+      // Delete from Firestore ONLY
       await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
@@ -160,7 +165,7 @@ class _EditTaskSheetState extends State<EditTaskSheet> {
 
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      // Handle error
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -186,7 +191,6 @@ class _EditTaskSheetState extends State<EditTaskSheet> {
                 'Edit Task',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: widget.roleColor),
               ),
-              // TRASH ICON
               IconButton(
                 icon: const Icon(Icons.delete_outline, color: Colors.red),
                 onPressed: _isSaving ? null : _deleteTask,
@@ -208,7 +212,6 @@ class _EditTaskSheetState extends State<EditTaskSheet> {
           ),
           const SizedBox(height: 20),
 
-          // DEADLINE
           InkWell(
             onTap: () => _pickDateTime(true),
             child: Container(
@@ -231,7 +234,6 @@ class _EditTaskSheetState extends State<EditTaskSheet> {
           ),
           const SizedBox(height: 12),
 
-          // REMINDER
           InkWell(
             onTap: () => _pickDateTime(false),
             child: Container(
