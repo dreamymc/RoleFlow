@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:roleflow_app/screens/tabs/edit_task_sheet.dart';
 import '../../models/role.dart';
 import '../../models/task_model.dart'; // Ensure you have this model from Phase A
 
@@ -152,7 +153,21 @@ class RoleTasksTab extends StatelessWidget {
                   ],
                 ),
                 onTap: () {
-                  // TODO: Open Edit/Detail Sheet
+                  // Import edit_task_sheet.dart at the top first!
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(20),
+                      ),
+                    ),
+                    builder: (context) => EditTaskSheet(
+                      task: task, // Pass the task object we clicked
+                      roleId: role.id,
+                      roleColor: role.color,
+                    ),
+                  );
                 },
               ),
             );
