@@ -1,3 +1,3 @@
-# roleflow_app
+# RoleFlow
 
-A new Flutter project.
+The proposed application, RoleFlow, is designed as an "Adaptive Life Dashboard" meant to mitigate the chaos of modern living. Unlike standard productivity tools that treat all tasks as equal, RoleFlow allows users to compartmentalize their lives into distinct "Roles"—such as Student, Professional, Parental, Personal, or Custom roles. The application provides a structured environment for managing tasks and building habits, utilizing intelligent logic and AI-driven summaries to help users maintain a healthy equilibrium across all facets of their lives without one domain overwhelming another.
