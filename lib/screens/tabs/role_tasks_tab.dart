@@ -2,9 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:roleflow_app/screens/tabs/edit_task_sheet.dart';
 import '../../models/role.dart';
-import '../../models/task_model.dart'; // Ensure you have this model from Phase A
+import '../../models/task_model.dart';
+import 'task_detail_sheet.dart'; // <--- NEW IMPORT
 
 class RoleTasksTab extends StatelessWidget {
   final Role role;
@@ -16,22 +16,19 @@ class RoleTasksTab extends StatelessWidget {
     final user = FirebaseAuth.instance.currentUser;
 
     return StreamBuilder<QuerySnapshot>(
-      // Listen to the specific Role's task collection
       stream: FirebaseFirestore.instance
           .collection('users')
           .doc(user!.uid)
           .collection('roles')
           .doc(role.id)
           .collection('tasks')
-          .orderBy('deadline', descending: false) // Show urgent tasks first
+          .orderBy('deadline', descending: false)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.hasError) {
+        if (snapshot.hasError)
           return const Center(child: Text('Error loading tasks'));
-        }
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting)
           return const Center(child: CircularProgressIndicator());
-        }
 
         final docs = snapshot.data!.docs;
 
@@ -60,25 +57,32 @@ class RoleTasksTab extends StatelessWidget {
         }
 
         return ListView.builder(
-          padding: const EdgeInsets.only(bottom: 80), // Space for FAB
+          padding: const EdgeInsets.only(bottom: 80),
           itemCount: docs.length,
           itemBuilder: (context, index) {
             final data = docs[index].data() as Map<String, dynamic>;
             final task = Task.fromFirestore(data, docs[index].id);
             final dateFormat = DateFormat('MMM dd • h:mm a');
 
+            // LOGIC: Check Overdue
+            final isOverdue =
+                task.deadline.isBefore(DateTime.now()) && !task.isCompleted;
+
             return Card(
               margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               elevation: 2,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
+                // Red border if overdue
+                side: isOverdue
+                    ? const BorderSide(color: Colors.red, width: 1.5)
+                    : BorderSide.none,
               ),
               child: ListTile(
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
                   vertical: 12,
                 ),
-                // CHECKBOX (To Complete Task)
                 leading: Transform.scale(
                   scale: 1.2,
                   child: Checkbox(
@@ -86,7 +90,6 @@ class RoleTasksTab extends StatelessWidget {
                     shape: const CircleBorder(),
                     value: task.isCompleted,
                     onChanged: (val) async {
-                      // Toggle completion in Firestore
                       await FirebaseFirestore.instance
                           .collection('users')
                           .doc(user.uid)
@@ -98,7 +101,6 @@ class RoleTasksTab extends StatelessWidget {
                     },
                   ),
                 ),
-                // TITLE & DESCRIPTION
                 title: Text(
                   task.title,
                   style: TextStyle(
@@ -123,28 +125,40 @@ class RoleTasksTab extends StatelessWidget {
                         ),
                       ),
                     const SizedBox(height: 8),
-                    // DEADLINE BADGE
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: role.color.withOpacity(0.1),
+                        color: isOverdue
+                            ? Colors.red[50]
+                            : role.color.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: role.color.withOpacity(0.3)),
+                        border: Border.all(
+                          color: isOverdue
+                              ? Colors.red
+                              : role.color.withOpacity(0.3),
+                        ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.event_busy, size: 12, color: role.color),
+                          Icon(
+                            Icons.event_busy,
+                            size: 12,
+                            color: isOverdue ? Colors.red : role.color,
+                          ),
                           const SizedBox(width: 4),
                           Text(
-                            "Due: ${dateFormat.format(task.deadline)}",
+                            // Show "OVERDUE" text if overdue
+                            isOverdue
+                                ? "OVERDUE"
+                                : "Due: ${dateFormat.format(task.deadline)}",
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              color: role.color,
+                              color: isOverdue ? Colors.red : role.color,
                             ),
                           ),
                         ],
@@ -153,17 +167,17 @@ class RoleTasksTab extends StatelessWidget {
                   ],
                 ),
                 onTap: () {
-                  // Import edit_task_sheet.dart at the top first!
+                  // NEW INTERACTION: OPEN DETAIL SHEET
                   showModalBottomSheet(
                     context: context,
-                    isScrollControlled: true,
+                    isScrollControlled: true, // Allow full height if needed
                     shape: const RoundedRectangleBorder(
                       borderRadius: BorderRadius.vertical(
                         top: Radius.circular(20),
                       ),
                     ),
-                    builder: (context) => EditTaskSheet(
-                      task: task, // Pass the task object we clicked
+                    builder: (context) => TaskDetailSheet(
+                      task: task,
                       roleId: role.id,
                       roleColor: role.color,
                     ),
