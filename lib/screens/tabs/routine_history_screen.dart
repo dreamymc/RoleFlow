@@ -15,6 +15,96 @@ class RoutineHistoryScreen extends StatelessWidget {
     required this.role,
   });
 
+  // --- LOGIC 1: DELETE LOG ENTRY (The Data Fix) ---
+  Future<void> _deleteLogEntry(BuildContext context, String logId) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    // 1. Delete the log document from the subcollection
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('roles')
+        .doc(role.id)
+        .collection('routines')
+        .doc(routine.id)
+        .collection('logs')
+        .doc(logId)
+        .delete();
+
+    // 2. Synchronize the parent routine's counter (Decrement -1)
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('roles')
+        .doc(role.id)
+        .collection('routines')
+        .doc(routine.id)
+        .update({
+          'count': FieldValue.increment(-1),
+          'totalLifetimeCount': FieldValue.increment(-1),
+        });
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Log entry deleted and counter synchronized.'),
+        ),
+      );
+    }
+  }
+
+  // --- LOGIC 2: EDIT LOG ENTRY (Tap-to-Edit) ---
+  void _editLogNote(BuildContext context, String logId, String currentNote) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final TextEditingController controller = TextEditingController(
+      text: currentNote,
+    );
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Edit Log Note"),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: "Your updated note"),
+          autofocus: true,
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              if (controller.text.trim().isNotEmpty) {
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(user.uid)
+                    .collection('roles')
+                    .doc(role.id)
+                    .collection('routines')
+                    .doc(routine.id)
+                    .collection('logs')
+                    .doc(logId)
+                    .update({
+                      'note': controller.text.trim(),
+                      'editedAt':
+                          FieldValue.serverTimestamp(), // Audit trail tag
+                    });
+              }
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Save Changes'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -160,94 +250,158 @@ class RoutineHistoryScreen extends StatelessWidget {
                   itemCount: docs.length,
                   itemBuilder: (context, index) {
                     final data = docs[index].data() as Map<String, dynamic>;
+                    final logId = docs[index].id;
                     final timestamp =
                         (data['timestamp'] as Timestamp?)?.toDate() ??
                         DateTime.now();
                     final note = data['note'] as String? ?? '';
+                    final isEdited = data.containsKey(
+                      'editedAt',
+                    ); // Check for audit trail
 
                     // Formatting
                     final dateLabel = DateFormat('MMM d').format(timestamp);
                     final timeLabel = DateFormat('h:mm a').format(timestamp);
 
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Left: Date
-                        SizedBox(
-                          width: 50,
-                          child: Column(
-                            children: [
-                              Text(
-                                dateLabel,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.grey[700],
-                                  fontSize: 12,
-                                ),
-                              ),
-                              Container(
-                                margin: const EdgeInsets.symmetric(vertical: 4),
-                                width: 2,
-                                height: 40,
-                                color: Colors.grey[200],
-                              ),
-                            ],
-                          ),
+                    return Dismissible(
+                      key: Key(logId), // Key needed for Dismissible
+                      direction: DismissDirection.endToStart,
+                      background: Container(
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.only(right: 20.0),
+                        color: Colors.red,
+                        child: const Icon(
+                          Icons.delete_forever,
+                          color: Colors.white,
                         ),
+                      ),
+                      confirmDismiss: (direction) => showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text("Confirm Deletion"),
+                          content: const Text(
+                            "Are you sure you want to permanently delete this log entry?",
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text("Cancel"),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text(
+                                "Delete",
+                                style: TextStyle(color: Colors.red),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      onDismissed: (direction) =>
+                          _deleteLogEntry(context, logId),
 
-                        // Right: Card bubble
-                        Expanded(
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 16),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.grey.shade200),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.03),
-                                  blurRadius: 5,
-                                  offset: const Offset(0, 2),
+                      // Timeline Row Content
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Left: Date/Timeline
+                          SizedBox(
+                            width: 50,
+                            child: Column(
+                              children: [
+                                Text(
+                                  dateLabel,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey[700],
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                Container(
+                                  margin: const EdgeInsets.symmetric(
+                                    vertical: 4,
+                                  ),
+                                  width: 2,
+                                  height: 40,
+                                  color: Colors.grey[200],
                                 ),
                               ],
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.check_circle,
-                                      size: 14,
-                                      color: role.color,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      "Checked In at $timeLabel",
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey[500],
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                          ),
+
+                          // Right: Card bubble (Editable on Tap)
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => _editLogNote(context, logId, note),
+                              child: Container(
+                                margin: const EdgeInsets.only(bottom: 16),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: Colors.grey.shade200,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.03),
+                                      blurRadius: 5,
+                                      offset: const Offset(0, 2),
                                     ),
                                   ],
                                 ),
-                                if (note.isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    note,
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      color: Colors.black87,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.check_circle,
+                                          size: 14,
+                                          color: role.color,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          "Checked In at $timeLabel",
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        if (isEdited)
+                                          Tooltip(
+                                            message:
+                                                "Note was edited after initial entry.",
+                                            child: Text(
+                                              "*Edited*",
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.red[500],
+                                                fontWeight: FontWeight.w900,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
                                     ),
-                                  ),
-                                ],
-                              ],
+                                    if (note.isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        note,
+                                        style: const TextStyle(
+                                          fontSize: 15,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     );
                   },
                 );

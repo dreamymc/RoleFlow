@@ -365,7 +365,7 @@ class _RoleGridCard extends StatelessWidget {
                         return _StatPill(
                           count: count, 
                           icon: Icons.repeat, 
-                          label: "Habits",
+                          label: "Routines",
                           color: role.color, // Colored to pop
                         );
                       },
