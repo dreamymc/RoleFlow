@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import '../services/auth_service.dart';
 import '../models/role.dart';
-import 'role_detail_screen.dart'; 
+import 'role_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -67,11 +67,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
                 FilledButton(
                   onPressed: () async {
                     if (newRoleName.trim().isEmpty) return;
-                    
+
                     final user = FirebaseAuth.instance.currentUser;
                     if (user != null) {
                       await FirebaseFirestore.instance
@@ -79,10 +82,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           .doc(user.uid)
                           .collection('roles')
                           .add({
-                        'name': newRoleName.trim(),
-                        'color': newRoleColor.value,
-                        'createdAt': FieldValue.serverTimestamp(),
-                      });
+                            'name': newRoleName.trim(),
+                            'color': newRoleColor.value,
+                            'createdAt': FieldValue.serverTimestamp(),
+                          });
                     }
                     if (mounted) Navigator.pop(context);
                   },
@@ -102,9 +105,14 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Role?'),
-        content: Text('Are you sure you want to delete "$roleName"?\nThis will delete all tasks and routines inside it.'),
+        content: Text(
+          'Are you sure you want to delete "$roleName"?\nThis will delete all tasks and routines inside it.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () async {
               final user = FirebaseAuth.instance.currentUser;
@@ -132,7 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final String name = user?.displayName ?? 'RoleFlow User';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
+      backgroundColor: const Color(0xFFF5F7FA), // Cleaner background
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddRoleDialog,
         backgroundColor: Colors.black87,
@@ -146,46 +154,64 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 20),
-              // --- HEADER ---
+              // --- HEADER (Updated Layout) ---
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  // Photo + Greeting Group
+                  Row(
                     children: [
-                      Text(
-                        'Welcome back,',
-                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundColor: Colors.grey[200],
+                        backgroundImage: photoURL != null
+                            ? NetworkImage(photoURL)
+                            : null,
+                        child: photoURL == null
+                            ? const Icon(Icons.person, color: Colors.grey)
+                            : null,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        name,
-                        style: const TextStyle(
-                          fontSize: 24, 
-                          fontWeight: FontWeight.w900, 
-                          color: Colors.black87
-                        ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Welcome back,',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              fontSize: 18, // Slightly smaller for better fit
+                              fontWeight: FontWeight.w900,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  GestureDetector(
-                    onTap: () async => await AuthService().signOut(),
-                    child: CircleAvatar(
-                      radius: 24,
-                      backgroundColor: Colors.grey[200],
-                      backgroundImage: photoURL != null ? NetworkImage(photoURL) : null,
-                      child: photoURL == null 
-                          ? const Icon(Icons.person, color: Colors.grey) 
-                          : null,
-                    ),
+
+                  // Dedicated Logout Button
+                  IconButton(
+                    onPressed: () async => await AuthService().signOut(),
+                    icon: const Icon(Icons.logout, color: Colors.grey),
+                    tooltip: "Logout",
                   ),
                 ],
               ),
-              
+
               const SizedBox(height: 30),
               const Text(
                 'Your Dashboard',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black54),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black54,
+                ),
               ),
               const SizedBox(height: 16),
 
@@ -199,42 +225,51 @@ class _HomeScreenState extends State<HomeScreen> {
                       .orderBy('createdAt', descending: false)
                       .snapshots(),
                   builder: (context, snapshot) {
-                    if (snapshot.hasError) return const Center(child: Text('Error loading roles'));
+                    if (snapshot.hasError)
+                      return const Center(child: Text('Error loading roles'));
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(child: CircularProgressIndicator());
                     }
 
                     final docs = snapshot.data!.docs;
-                    
+
                     if (docs.isEmpty) {
                       return Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.dashboard_customize, size: 60, color: Colors.grey[300]),
+                            Icon(
+                              Icons.dashboard_customize,
+                              size: 60,
+                              color: Colors.grey[300],
+                            ),
                             const SizedBox(height: 16),
-                            const Text("No roles yet. Create your first one!", style: TextStyle(color: Colors.grey)),
+                            const Text(
+                              "No roles yet. Create your first one!",
+                              style: TextStyle(color: Colors.grey),
+                            ),
                           ],
                         ),
                       );
                     }
 
                     return GridView.builder(
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2, 
-                        crossAxisSpacing: 16,
-                        mainAxisSpacing: 16,
-                        childAspectRatio: 0.85, 
-                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                            childAspectRatio: 0.85,
+                          ),
                       itemCount: docs.length,
                       itemBuilder: (context, index) {
                         final role = Role.fromFirestore(
-                          docs[index].data() as Map<String, dynamic>, 
-                          docs[index].id
+                          docs[index].data() as Map<String, dynamic>,
+                          docs[index].id,
                         );
-                        
+
                         return _RoleGridCard(
-                          role: role, 
+                          role: role,
                           onLongPress: () => _deleteRole(role.id, role.name),
                         );
                       },
@@ -268,9 +303,7 @@ class _RoleGridCard extends StatelessWidget {
       onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (context) => RoleDetailScreen(role: role),
-          ),
+          MaterialPageRoute(builder: (context) => RoleDetailScreen(role: role)),
         );
       },
       child: Container(
@@ -305,9 +338,9 @@ class _RoleGridCard extends StatelessWidget {
                   Icon(Icons.more_horiz, color: Colors.grey[300], size: 20),
                 ],
               ),
-              
+
               const Spacer(),
-              
+
               // Role Name
               Text(
                 role.name,
@@ -337,17 +370,19 @@ class _RoleGridCard extends StatelessWidget {
                           .where('isCompleted', isEqualTo: false)
                           .snapshots(),
                       builder: (context, snapshot) {
-                        int count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+                        int count = snapshot.hasData
+                            ? snapshot.data!.docs.length
+                            : 0;
                         return _StatPill(
-                          count: count, 
-                          icon: Icons.check_circle_outline, 
+                          count: count,
+                          icon: Icons.check_circle_outline,
                           label: "Tasks",
                           color: Colors.grey[700]!,
                         );
                       },
                     ),
                   ),
-                  
+
                   const SizedBox(width: 8),
 
                   // 2. ROUTINE STAT (Total)
@@ -361,11 +396,13 @@ class _RoleGridCard extends StatelessWidget {
                           .collection('routines')
                           .snapshots(),
                       builder: (context, snapshot) {
-                        int count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+                        int count = snapshot.hasData
+                            ? snapshot.data!.docs.length
+                            : 0;
                         return _StatPill(
-                          count: count, 
-                          icon: Icons.repeat, 
-                          label: "Routines",
+                          count: count,
+                          icon: Icons.repeat,
+                          label: "Habits",
                           color: role.color, // Colored to pop
                         );
                       },
@@ -391,8 +428,8 @@ class _StatPill extends StatelessWidget {
   final Color color;
 
   const _StatPill({
-    required this.count, 
-    required this.icon, 
+    required this.count,
+    required this.icon,
     required this.label,
     required this.color,
   });
@@ -413,17 +450,17 @@ class _StatPill extends StatelessWidget {
           Text(
             "$count",
             style: TextStyle(
-              fontSize: 16, 
-              fontWeight: FontWeight.bold, 
-              color: color
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: color,
             ),
           ),
           Text(
             label,
             style: TextStyle(
-              fontSize: 10, 
-              color: color.withOpacity(0.8), 
-              fontWeight: FontWeight.w500
+              fontSize: 10,
+              color: color.withOpacity(0.8),
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
