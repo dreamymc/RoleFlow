@@ -83,9 +83,10 @@ class _RoutineCardState extends State<RoutineCard>
     final bool isOverAchiever = widget.routine.count > widget.routine.target;
     final double progress = (widget.routine.count / widget.routine.target)
         .clamp(0.0, 1.0);
+    // inside build()
     final String startStr = DateFormat(
       'MMM d',
-    ).format(widget.routine.startDate);
+    ).format(widget.routine.startDate.toLocal()); // Add .toLocal()
 
     return Stack(
       alignment: Alignment.center,

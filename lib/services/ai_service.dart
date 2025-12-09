@@ -1,23 +1,199 @@
-import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:intl/intl.dart'; 
 import '../models/role.dart';
 
+// Helper class to store the summary + the "Fingerprint" of the data that generated it
+class _CachedSummary {
+  final String text;
+  final String dataFingerprint; // Changed to String for the hash ID
+
+  _CachedSummary(this.text, this.dataFingerprint);
+}
+
 class AIService {
-  // Singleton pattern
   static final AIService _instance = AIService._internal();
   factory AIService() => _instance;
   AIService._internal();
 
-  // THE MOCK BRAIN
-  // Later, we will replace this with: Future<String> generateRealSummary(...)
-  Future<String> generateRoleSummary(Role role) async {
-    // 1. Fake Loading Delay (looks like thinking)
-    await Future.delayed(const Duration(seconds: 3));
+  // 1. IN-MEMORY CACHE (First line of defense)
+  final Map<String, _CachedSummary> _cache = {};
 
-    // 2. Return Context-Aware Fake Text
-    // This makes it look like it actually looked at your role name.
-    return "Based on your current activity in the '${role.name}' role, you are maintaining a consistent streak.\n\n"
-        "However, you have high-priority tasks due within 48 hours. "
-        "Your routine completion rate is 66%, which is good, but try to close the gap on your 'Daily Check-in'.\n\n"
-        "💡 Suggestion: Focus on clearing the overdue items before starting new ones.";
+  // 2. CONFIGURATION
+  static final String _apiKey = dotenv.get('GEMINI_API_KEY'); 
+  
+  // Use the smart model
+  final _model = GenerativeModel(
+    model: 'gemini-2.5-flash', 
+    apiKey: _apiKey,
+  );
+
+  // 3. THE DEEP BRAIN ENGINE
+  Future<String> generateRoleSummary(Role role) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return "Error: User not logged in.";
+      
+      // FIX: Get NOW in Local Time for accurate math
+      final now = DateTime.now().toLocal();
+
+      // --- STEP A: GATHER DEEP CONTEXT ---
+      
+      // 1. Tasks (Pending)
+      final taskSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('roles')
+          .doc(role.id)
+          .collection('tasks')
+          .where('isCompleted', isEqualTo: false)
+          .get();
+
+      // 2. Routines (Active)
+      final routineSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('roles')
+          .doc(role.id)
+          .collection('routines')
+          .get();
+
+      // 3. Routine Logs (Mining for Context)
+      StringBuffer logBuffer = StringBuffer();
+      
+      for (var doc in routineSnap.docs) {
+        final routineName = doc['title'];
+        final logs = await doc.reference
+            .collection('logs')
+            .orderBy('timestamp', descending: true)
+            .limit(2)
+            .get();
+        
+        if (logs.docs.isNotEmpty) {
+          logBuffer.writeln("Notes for '$routineName':");
+          for (var log in logs.docs) {
+            final note = log['note'];
+            if (note != null && note.toString().isNotEmpty) {
+              logBuffer.writeln(" - '$note'");
+            }
+          }
+        }
+      }
+
+      // --- STEP B: GENERATE FINGERPRINT ---
+      // We build a string of all data to see if anything changed.
+      final taskListStr = taskSnap.docs.map((d) {
+        // FIX: Timezone aware comparison
+        final deadline = (d['deadline'] as Timestamp).toDate().toLocal();
+        
+        // Calculate status explicitly in Dart
+        final todayStart = DateTime(now.year, now.month, now.day);
+        final deadlineStart = DateTime(deadline.year, deadline.month, deadline.day);
+        final diff = deadlineStart.difference(todayStart).inDays;
+        
+        String statusLabel;
+        if (diff < 0) {
+          statusLabel = "[URGENT: OVERDUE by ${diff.abs()} days!]";
+        } else if (diff == 0) {
+          statusLabel = "[DUE TODAY]";
+        } else {
+          statusLabel = "(Due in $diff days)";
+        }
+
+        return "- ${d['title']} $statusLabel";
+      }).join('\n');
+
+      final routineListStr = routineSnap.docs.map((d) => 
+        "${d['title']}-${d['count']}/${d['target']}"
+      ).join('|');
+
+      final logsStr = logBuffer.toString();
+
+      // Create a unique ID for this exact state of data
+      final currentFingerprint = (taskListStr + routineListStr + logsStr).hashCode.toString();
+
+      // --- STEP C: CHECK MEMORY CACHE ---
+      if (_cache.containsKey(role.id)) {
+        final cached = _cache[role.id]!;
+        if (cached.dataFingerprint == currentFingerprint) {
+          return cached.text; 
+        }
+      }
+
+      // --- STEP D: CHECK DATABASE PERSISTENCE ---
+      final roleDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('roles')
+          .doc(role.id)
+          .get();
+
+      final savedFingerprint = roleDoc.data()?['aiFingerprint'];
+      final savedSummary = roleDoc.data()?['aiSummary'];
+
+      if (savedFingerprint == currentFingerprint && savedSummary != null) {
+        // Update memory cache and return
+        _cache[role.id] = _CachedSummary(savedSummary, currentFingerprint);
+        print("🧠 Database Hit: Loading saved summary.");
+        return savedSummary; 
+      }
+
+      print("🔌 Data Changed. Calling Gemini API...");
+
+      // --- STEP E: THE PROMPT ---
+      // We inject Today's Date and the explicit Overdue tags
+      final promptText = """
+      You are analyzing the user's life role called '${role.name}'.
+      
+      CRITICAL INSTRUCTIONS:
+      1. Speak directly to the user as "You". 
+      2. NEVER address the user as "${role.name}" (that is a category, not a person).
+      3. Do NOT give generic suggestions or ask questions like "How about...".
+      4. Just give a pure, direct analysis of their balance and consistency.
+      5. Keep it natural, encouraging, and under 3 sentences.
+      
+      TODAY'S DATE: ${DateFormat('yyyy-MM-dd').format(now)}
+      
+      CURRENT DATA:
+      
+      [PENDING TASKS]
+      $taskListStr
+      ${taskListStr.isEmpty ? "(No pending tasks)" : ""}
+      
+      [HABIT ROUTINES]
+      ${routineSnap.docs.map((d) => "- ${d['title']}: ${d['count']}/${d['target']} done").join('\n')}
+      
+      [RECENT NOTES (Context)]
+      $logsStr
+      """;
+
+      // --- STEP F: CALL API & SAVE ---
+      final content = [Content.text(promptText)];
+      final response = await _model.generateContent(content);
+      final responseText = response.text ?? "AI unavailable.";
+
+      // Save to Memory
+      _cache[role.id] = _CachedSummary(responseText, currentFingerprint);
+
+      // Save to Database
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('roles')
+          .doc(role.id)
+          .update({
+            'aiSummary': responseText,
+            'aiFingerprint': currentFingerprint,
+            'aiLastUpdated': FieldValue.serverTimestamp(),
+          });
+
+      return responseText;
+
+    } catch (e) {
+      print("AI Error: $e");
+      return "AI Summary is currently unavailable, reload the page or wait later..";
+    }
   }
 }

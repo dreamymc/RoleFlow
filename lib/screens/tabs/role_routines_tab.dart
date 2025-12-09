@@ -47,26 +47,30 @@ class RoleRoutinesTab extends StatelessWidget {
         .collection('routines')
         .doc(routine.id)
         .update({
-      'count': FieldValue.increment(-1),
-      'totalLifetimeCount': FieldValue.increment(-1),
-      // Reset date to unlock button (Year 2000)
-      'lastUpdated': DateTime(2000, 1, 1), 
-    });
+          'count': FieldValue.increment(-1),
+          'totalLifetimeCount': FieldValue.increment(-1),
+          // Reset date to unlock button (Year 2000)
+          'lastUpdated': DateTime(2000, 1, 1),
+        });
   }
 
   // --- LOGIC 3: JOURNAL DIALOG ---
-  void _showJournalDialog(BuildContext context, Routine routine, DocumentReference routineRef) {
+  void _showJournalDialog(
+    BuildContext context,
+    Routine routine,
+    DocumentReference routineRef,
+  ) {
     final noteController = TextEditingController();
-    
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20, 
-          left: 20, 
-          right: 20, 
-          top: 20
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          left: 20,
+          right: 20,
+          top: 20,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -107,19 +111,21 @@ class RoleRoutinesTab extends StatelessWidget {
               },
               style: FilledButton.styleFrom(backgroundColor: role.color),
               child: const Text("Done"),
-            )
+            ),
           ],
         ),
       ),
     );
   }
 
-  // Helper to check if "Done Today"
+  // Helper to check if "Done Today" (Local Time Fix)
   bool _isDoneToday(DateTime lastUpdated) {
-    final now = DateTime.now();
-    return now.year == lastUpdated.year && 
-           now.month == lastUpdated.month && 
-           now.day == lastUpdated.day;
+    final now = DateTime.now().toLocal();
+    final localLastUpdated = lastUpdated.toLocal();
+
+    return now.year == localLastUpdated.year &&
+        now.month == localLastUpdated.month &&
+        now.day == localLastUpdated.day;
   }
 
   @override
