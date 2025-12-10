@@ -133,6 +133,34 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // --- LOGOUT CONFIRMATION LOGIC (NEW) ---
+  void _confirmSignOut() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Log Out'),
+        content: const Text('Are you sure you want to log out of RoleFlow?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context), // Close dialog
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(context); // Close dialog
+              await AuthService().signOut(); // Actually sign out
+            },
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Log Out'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -154,7 +182,7 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 20),
-              // --- HEADER (Updated Layout) ---
+              // --- HEADER (Updated Layout with Confirm Logout) ---
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -185,7 +213,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           Text(
                             name,
                             style: const TextStyle(
-                              fontSize: 18, // Slightly smaller for better fit
+                              fontSize: 18,
                               fontWeight: FontWeight.w900,
                               color: Colors.black87,
                             ),
@@ -195,9 +223,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
 
-                  // Dedicated Logout Button
+                  // Dedicated Logout Button (Now with Confirmation)
                   IconButton(
-                    onPressed: () async => await AuthService().signOut(),
+                    onPressed: _confirmSignOut, // Calls the dialog now!
                     icon: const Icon(Icons.logout, color: Colors.grey),
                     tooltip: "Logout",
                   ),
