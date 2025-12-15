@@ -150,7 +150,7 @@ class AIService {
       CRITICAL INSTRUCTIONS:
       1. Speak directly to the user as "You". 
       2. NEVER address the user as "${role.name}" (that is a category, not a person).
-      3. Do NOT give generic suggestions or ask questions like "How about...".
+      3. Give suggestions about what the user can do right now and DO NOT ask questions like "How about...".
       4. Just give a pure, direct analysis of their balance and consistency.
       5. Keep it natural, encouraging, and under 3 sentences.
       
