@@ -8,6 +8,7 @@ import '../services/auth_service.dart';
 import '../services/cloudinary_service.dart';
 import '../models/role.dart';
 import 'role_detail_screen.dart';
+import 'alerts_screen.dart'; // IMPORT THE NEW SCREEN
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,6 +18,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // NEW: Track the active tab
+  int _currentIndex = 0;
+
   // --- ADD ROLE LOGIC ---
   void _showAddRoleDialog() {
     String newRoleName = '';
@@ -42,7 +46,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       onChanged: (val) => newRoleName = val,
                     ),
                     const SizedBox(height: 16),
-                    // Use the simple color row for quick add
                     _buildProColorRow(context, "Role Color", newRoleColor, (c) {
                       setStateDialog(() => newRoleColor = c);
                     }),
@@ -176,9 +179,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- THE PROFILE STUDIO SHEET (UPGRADED) ---
+  // --- THE PROFILE STUDIO SHEET ---
   void _showProfileStudio(User user, Map<String, dynamic> userData) {
-    // 1. SETUP TEMPORARY STATE (Changes live here until you click Save)
     final nameCtrl = TextEditingController(
       text: userData['displayName'] ?? user.displayName ?? '',
     );
@@ -186,16 +188,11 @@ class _HomeScreenState extends State<HomeScreen> {
       text: userData['greeting'] ?? 'Welcome back,',
     );
 
-    // Colors
     Color tempBgColor = Color(userData['backgroundColor'] ?? 0xFFF5F7FA);
-    Color tempTextColor = Color(
-      userData['textColor'] ?? 0xFF000000,
-    ); // Default to Black
+    Color tempTextColor = Color(userData['textColor'] ?? 0xFF000000);
 
-    // Photo
-    String? currentPhotoURL =
-        userData['photoURL'] ?? user.photoURL; // What's in DB
-    String? newUploadedURL; // What we just uploaded (but haven't saved yet)
+    String? currentPhotoURL = userData['photoURL'] ?? user.photoURL;
+    String? newUploadedURL;
 
     bool isUploading = false;
 
@@ -208,7 +205,6 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
-            // Helper to decide which photo to show PREVIEW of
             final ImageProvider? bgImage;
             if (newUploadedURL != null) {
               bgImage = NetworkImage(newUploadedURL!);
@@ -235,7 +231,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // 1. AVATAR UPLOADER (NOW DELAYED SAVE)
+                  // AVATAR UPLOADER
                   Center(
                     child: GestureDetector(
                       onTap: () async {
@@ -246,14 +242,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
                         if (image != null) {
                           setSheetState(() => isUploading = true);
-                          // Upload to Cloudinary, but ONLY get the URL back. Don't save to DB yet.
                           String? url = await CloudinaryService().uploadImage(
                             File(image.path),
                           );
 
                           if (url != null) {
                             setSheetState(() {
-                              newUploadedURL = url; // Store in temp variable
+                              newUploadedURL = url;
                               isUploading = false;
                             });
                           } else {
@@ -299,7 +294,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // 2. IDENTITY
+                  // IDENTITY
                   TextField(
                     controller: nameCtrl,
                     decoration: const InputDecoration(
@@ -317,34 +312,29 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // 3. PRO COLOR PICKERS
+                  // THEME
                   const Text(
                     "Theme Customization",
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
 
-                  // Background Color
                   _buildProColorRow(context, "Background", tempBgColor, (c) {
                     setSheetState(() => tempBgColor = c);
                   }),
                   const SizedBox(height: 12),
 
-                  // Text Color
                   _buildProColorRow(context, "Text Color", tempTextColor, (c) {
                     setSheetState(() => tempTextColor = c);
                   }),
 
                   const SizedBox(height: 32),
 
-                  // 4. MAIN SAVE BUTTON
                   SizedBox(
                     width: double.infinity,
                     height: 50,
                     child: FilledButton(
                       onPressed: () async {
-                        // THIS IS THE MOMENT WE SAVE EVERYTHING
-
                         Map<String, dynamic> updateData = {
                           'displayName': nameCtrl.text.trim(),
                           'greeting': greetingCtrl.text.trim(),
@@ -352,19 +342,16 @@ class _HomeScreenState extends State<HomeScreen> {
                           'textColor': tempTextColor.value,
                         };
 
-                        // Only update photo if a new one was uploaded
                         if (newUploadedURL != null) {
                           updateData['photoURL'] = newUploadedURL;
                           await user.updatePhotoURL(newUploadedURL);
                         }
 
-                        // Save to Firestore (Merge to create if missing)
                         await FirebaseFirestore.instance
                             .collection('users')
                             .doc(user.uid)
                             .set(updateData, SetOptions(merge: true));
 
-                        // Update Auth Display Name
                         await user.updateDisplayName(nameCtrl.text.trim());
 
                         if (mounted) Navigator.pop(context);
@@ -381,7 +368,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- HELPER: PRO COLOR PICKER (WHEEL + RGB SLIDERS) ---
+  // --- HELPER: PRO COLOR PICKER ---
   Widget _buildProColorRow(
     BuildContext context,
     String label,
@@ -397,12 +384,9 @@ class _HomeScreenState extends State<HomeScreen> {
             showDialog(
               context: context,
               builder: (ctx) {
-                // Initialize local state for the dialog
                 Color pickerColor = currentColor;
-
                 return AlertDialog(
                   contentPadding: const EdgeInsets.all(0),
-                  // SizedBox to control height of the TabBarView
                   content: SizedBox(
                     width: 340,
                     height: 450,
@@ -424,7 +408,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               Expanded(
                                 child: TabBarView(
                                   children: [
-                                    // TAB 1: THE DRAGGABLE WHEEL + HEX
                                     SingleChildScrollView(
                                       child: Padding(
                                         padding: const EdgeInsets.only(
@@ -437,14 +420,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                           ),
                                           enableAlpha: false,
                                           displayThumbColor: true,
-                                          hexInputBar: true, // Hex is Editable
+                                          hexInputBar: true,
                                           paletteType: PaletteType.hsvWithHue,
-                                          labelTypes:
-                                              const [], // Hide text here to keep it clean
+                                          labelTypes: const [],
                                         ),
                                       ),
                                     ),
-                                    // TAB 2: THE RGB SLIDERS + TEXT FIELDS
                                     Padding(
                                       padding: const EdgeInsets.all(24.0),
                                       child: SlidePicker(
@@ -454,7 +435,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                         ),
                                         enableAlpha: false,
                                         displayThumbColor: true,
-                                        showLabel: true, // Shows R: 255
+                                        showLabel: true,
                                         showIndicator: true,
                                       ),
                                     ),
@@ -540,137 +521,159 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         final bgColor = Color(userData['backgroundColor'] ?? 0xFFF5F7FA);
-        final textColor = Color(
-          userData['textColor'] ?? 0xFF000000,
-        ); // READ TEXT COLOR
+        final textColor = Color(userData['textColor'] ?? 0xFF000000);
 
         final displayName =
             userData['displayName'] ?? user.displayName ?? 'RoleFlow User';
         final photoURL = userData['photoURL'] ?? user.photoURL;
         final greeting = userData['greeting'] ?? 'Welcome back,';
 
+        // --- DASHBOARD VIEW (Roles Grid) ---
+        Widget dashboardView = SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 20),
+                // HEADER
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    GestureDetector(
+                      onTap: () => _showProfileStudio(user, userData),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 24,
+                            backgroundColor: Colors.grey[200],
+                            backgroundImage: photoURL != null
+                                ? NetworkImage(photoURL)
+                                : null,
+                            child: photoURL == null
+                                ? const Icon(Icons.person, color: Colors.grey)
+                                : null,
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                greeting,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: textColor.withOpacity(0.7),
+                                ),
+                              ),
+                              Text(
+                                displayName,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                  color: textColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: _confirmSignOut,
+                      icon: Icon(
+                        Icons.logout,
+                        color: textColor.withOpacity(0.5),
+                      ),
+                      tooltip: "Logout",
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 30),
+                Text(
+                  'Your Dashboard',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: textColor.withOpacity(0.8),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // ROLES GRID
+                Expanded(
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(user.uid)
+                        .collection('roles')
+                        .orderBy('createdAt', descending: false)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError)
+                        return const Center(child: Text('Error loading roles'));
+                      if (snapshot.connectionState == ConnectionState.waiting)
+                        return const Center(child: CircularProgressIndicator());
+
+                      final docs = snapshot.data!.docs;
+                      if (docs.isEmpty)
+                        return Center(
+                          child: Text(
+                            "No roles yet.",
+                            style: TextStyle(color: textColor.withOpacity(0.6)),
+                          ),
+                        );
+
+                      return _buildDynamicLayout(docs);
+                    },
+                  ),
+                ),
+                const SizedBox(height: 20), // Bottom spacer for FAB
+              ],
+            ),
+          ),
+        );
+
+        // --- MAIN SCAFFOLD WITH TAB SWITCHING ---
         return Scaffold(
           resizeToAvoidBottomInset: false,
           backgroundColor: bgColor,
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: _showAddRoleDialog,
-            backgroundColor: Colors.black87,
-            icon: const Icon(Icons.add, color: Colors.white),
-            label: const Text(
-              "New Role",
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-          body: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 20),
-                  // --- HEADER ---
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      GestureDetector(
-                        onTap: () => _showProfileStudio(user, userData),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 24,
-                              backgroundColor: Colors.grey[200],
-                              backgroundImage: photoURL != null
-                                  ? NetworkImage(photoURL)
-                                  : null,
-                              child: photoURL == null
-                                  ? const Icon(Icons.person, color: Colors.grey)
-                                  : null,
-                            ),
-                            const SizedBox(width: 12),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // APPLY TEXT COLOR HERE
-                                Text(
-                                  greeting,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: textColor.withOpacity(0.7),
-                                  ),
-                                ),
-                                Text(
-                                  displayName,
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w900,
-                                    color: textColor,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: _confirmSignOut,
-                        icon: Icon(
-                          Icons.logout,
-                          color: textColor.withOpacity(0.5),
-                        ),
-                        tooltip: "Logout",
-                      ),
-                    ],
+
+          // Only show "New Role" FAB on the Dashboard Tab
+          floatingActionButton: _currentIndex == 0
+              ? FloatingActionButton.extended(
+                  onPressed: _showAddRoleDialog,
+                  backgroundColor: Colors.black87,
+                  icon: const Icon(Icons.add, color: Colors.white),
+                  label: const Text(
+                    "New Role",
+                    style: TextStyle(color: Colors.white),
                   ),
+                )
+              : null,
 
-                  const SizedBox(height: 30),
-                  Text(
-                    'Your Dashboard',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: textColor.withOpacity(0.8),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+          // SWITCH BETWEEN DASHBOARD AND ALERTS
+          body: _currentIndex == 0 ? dashboardView : const AlertsScreen(),
 
-                  // --- DYNAMIC ROLES AREA ---
-                  Expanded(
-                    child: StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(user.uid)
-                          .collection('roles')
-                          .orderBy('createdAt', descending: false)
-                          .snapshots(),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasError)
-                          return const Center(
-                            child: Text('Error loading roles'),
-                          );
-                        if (snapshot.connectionState == ConnectionState.waiting)
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-
-                        final docs = snapshot.data!.docs;
-                        if (docs.isEmpty)
-                          return Center(
-                            child: Text(
-                              "No roles yet.",
-                              style: TextStyle(
-                                color: textColor.withOpacity(0.6),
-                              ),
-                            ),
-                          );
-
-                        return _buildDynamicLayout(docs);
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 80),
-                ],
+          // NEW BOTTOM NAVIGATION BAR
+          bottomNavigationBar: BottomNavigationBar(
+            currentIndex: _currentIndex,
+            onTap: (index) => setState(() => _currentIndex = index),
+            selectedItemColor: Colors.black,
+            unselectedItemColor: Colors.grey,
+            backgroundColor: Colors.white,
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.dashboard_outlined),
+                activeIcon: Icon(Icons.dashboard),
+                label: 'Dashboard',
               ),
-            ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.notifications_none),
+                activeIcon: Icon(Icons.notifications),
+                label: 'Notifications',
+              ),
+            ],
           ),
         );
       },
@@ -781,9 +784,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// ------------------------------------------------------
-// HELPER: The Card Widget (Compact Fix)
-// ------------------------------------------------------
 class _RoleGridCard extends StatelessWidget {
   final Role role;
   final VoidCallback onMenuPressed;
@@ -812,7 +812,6 @@ class _RoleGridCard extends StatelessWidget {
             ),
           ],
         ),
-        // FIX 1: Reduce padding from 20 to 16 to save vertical space
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -822,9 +821,7 @@ class _RoleGridCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(
-                      10,
-                    ), // Slightly smaller icon padding
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: role.color.withOpacity(0.1),
                       shape: BoxShape.circle,
@@ -841,13 +838,11 @@ class _RoleGridCard extends StatelessWidget {
                   ),
                 ],
               ),
-
-              const Spacer(), // Pushes content to edges, but collapses if space is tight
-              // Role Name
+              const Spacer(),
               Text(
                 role.name,
                 style: const TextStyle(
-                  fontSize: 20, // Reduced from 22 to 20
+                  fontSize: 20,
                   fontWeight: FontWeight.w800,
                   height: 1.1,
                   letterSpacing: -0.5,
@@ -855,10 +850,7 @@ class _RoleGridCard extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-
-              // FIX 2: Reduce gap from 20 to 12
               const SizedBox(height: 12),
-
               Row(
                 children: [
                   Expanded(
@@ -911,9 +903,6 @@ class _RoleGridCard extends StatelessWidget {
   }
 }
 
-// ------------------------------------------------------
-// HELPER: The "Stat Pill" (Tightened for Overflow Fix)
-// ------------------------------------------------------
 class _StatPill extends StatelessWidget {
   final int count;
   final IconData icon;
@@ -928,7 +917,6 @@ class _StatPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      // REDUCED VERTICAL PADDING FROM 10 TO 8
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
       decoration: BoxDecoration(
         color: color.withOpacity(0.08),
@@ -937,12 +925,10 @@ class _StatPill extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // REDUCED ICON SIZE FROM 18 TO 16
           Icon(icon, size: 16, color: color),
-          const SizedBox(height: 4), // Reduced from 6 to 4
+          const SizedBox(height: 4),
           Text(
             "$count",
-            // REDUCED FONT SIZE FROM 18 TO 16
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,

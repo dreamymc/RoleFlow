@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../../services/notification_service.dart';
 
 class AddTaskSheet extends StatefulWidget {
   final String roleId;
@@ -50,7 +51,6 @@ class _AddTaskSheetState extends State<AddTaskSheet> {
 
   Future<void> _pickDateTime(bool isDeadline) async {
     final now = DateTime.now();
-    // Allow picking today, validation handles the specific time check
     final initialDate = isDeadline ? _deadline : (_reminder ?? now);
 
     final date = await showDatePicker(
@@ -114,7 +114,25 @@ class _AddTaskSheetState extends State<AddTaskSheet> {
 
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
+      final bool hasReminder = _reminder != null;
 
+      // Use a unique ID for the notification and a temporary task ID reference
+      final int notificationId = hasReminder
+          ? DateTime.now().millisecondsSinceEpoch.remainder(2147483647)
+          : 0;
+
+      // 1. Schedule the notification first (If reminder exists)
+      if (hasReminder) {
+        // Log confirms this line is reached successfully.
+        await NotificationService().scheduleNotification(
+          id: notificationId,
+          title: "RoleFlow Reminder: ${widget.roleColor}",
+          body: _titleController.text.trim(),
+          scheduledTime: _reminder!,
+        );
+      }
+
+      // 2. Save to Firestore
       await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
@@ -125,20 +143,28 @@ class _AddTaskSheetState extends State<AddTaskSheet> {
             'title': _titleController.text.trim(),
             'description': _descController.text.trim(),
             'deadline': Timestamp.fromDate(_deadline),
-            'reminder': _reminder != null
-                ? Timestamp.fromDate(_reminder!)
-                : null,
+            'reminder': hasReminder ? Timestamp.fromDate(_reminder!) : null,
+            'notificationId': hasReminder ? notificationId : null,
             'isCompleted': false,
             'roleId': widget.roleId,
             'createdAt': FieldValue.serverTimestamp(),
           });
 
-      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        // NEW: Show Success Message and close dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Task added and reminder successfully scheduled!'),
+          ),
+        );
+        Navigator.pop(context);
+      }
     } catch (e) {
       if (mounted) {
+        // Catch any failure and display it, keeping the saving state clear.
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ).showSnackBar(SnackBar(content: Text('Error saving task: $e')));
         setState(() => _isSaving = false);
       }
     }

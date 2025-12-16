@@ -168,7 +168,12 @@ class _LoginScreenState extends State<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // 1. LOGO AREA
-                const Icon(Icons.layers, size: 60, color: Colors.black87),
+                Image.asset(
+                  'assets/app_icon.png',
+                  height:
+                      80, // I increased it slightly from 60 to look better as a main logo
+                  width: 80,
+                ),
                 const SizedBox(height: 16),
                 const Text(
                   'Welcome back',

@@ -54,30 +54,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
     } else {
       // Success
 
-      // CRITICAL FIX: Update the display name in Firebase Auth profile
+      // Update the display name
       await _auth.updateUserName(name);
 
       if (mounted) {
-        // Show "Check Email" dialog
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            title: const Text('Verify your email'),
-            content: const Text(
-              'We have sent a verification link to your email address. Please verify your account to access all features.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.pop(context); // Close Sign Up screen
-                },
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
+        // Just close the screen.
+        // The AuthGate in main.dart will detect the new user
+        // and automatically switch to the Home Screen.
+        Navigator.pop(context);
       }
     }
   }

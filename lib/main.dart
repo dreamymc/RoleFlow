@@ -1,22 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart'; // Import this
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import 'services/auth_gate.dart';
+import 'services/notification_service.dart'; // IMPORT THIS
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
     // 1. Attempt to load the .env file
-    // If this fails (file missing), it will jump to 'catch'
     await dotenv.load(fileName: ".env");
     print("✅ Environment variables loaded successfully.");
   } catch (e) {
-    print("⚠️ WARNING: .env file not found or invalid. Using defaults/failing safely.");
-    print("Error: $e");
-    // We continue anyway so the app doesn't freeze, 
-    // but the AI features might break later.
+    print(
+      "⚠️ WARNING: .env file not found or invalid. Using defaults/failing safely.",
+    );
   }
 
   try {
@@ -27,8 +26,10 @@ void main() async {
     print("✅ Firebase initialized successfully.");
   } catch (e) {
     print("❌ CRITICAL: Firebase failed to initialize.");
-    print("Error: $e");
   }
+
+  // 3. NEW: Initialize Notifications System
+  await NotificationService().init();
 
   runApp(const RoleFlowApp());
 }
