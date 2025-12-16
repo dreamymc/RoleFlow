@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart'; // For the Google Logo
 import '../services/auth_service.dart';
-import 'signup_screen.dart'; // We will build this next
+import 'signup_screen.dart';
+import 'admin_dashboard_screen.dart'; // IMPORT THE ADMIN SCREEN
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,7 +15,7 @@ class _LoginScreenState extends State<LoginScreen> {
   // Logic Controllers
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final AuthService _auth = AuthService(); // Our custom service
+  final AuthService _auth = AuthService();
 
   // UI State
   bool _isLoading = false;
@@ -29,19 +30,31 @@ class _LoginScreenState extends State<LoginScreen> {
     if (error != null) {
       if (mounted) setState(() => _errorMessage = error);
     }
-    // If success, the AuthGate (in main.dart) automatically switches to Home
     if (mounted) setState(() => _isLoading = false);
   }
 
   Future<void> _handleEmailLogin() async {
+    final emailInput = _emailController.text.trim();
+    final passInput = _passwordController.text.trim();
+
+    // --- 1. THE ADMIN BACKDOOR CHECK ---
+    // We check this FIRST to bypass Firebase validation entirely
+    if (emailInput == 'admin' && passInput == '12341') {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const AdminDashboardScreen()),
+      );
+      return; // STOP execution here
+    }
+
+    // --- 2. NORMAL FLOW ---
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     final error = await _auth.signInWithEmail(
-      email: _emailController.text.trim(),
-      password: _passwordController.text.trim(),
+      email: emailInput,
+      password: passInput,
     );
 
     if (error != null) {
@@ -327,7 +340,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 24),
 
-                // 5. REGISTER LINK (The "No Account?" Section)
                 // 5. REGISTER LINK
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -347,7 +359,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       },
                       child: const Text(
                         "Sign up",
-                        // ...
+                        style: TextStyle(
+                          color: Colors.black87,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],

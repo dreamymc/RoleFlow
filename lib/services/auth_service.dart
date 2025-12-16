@@ -13,29 +13,23 @@ class AuthService {
 
   // --- EMAIL & PASSWORD ---
 
-  // Inside AuthService class in auth_service.dart
-
-  // NEW FUNCTION TO UPDATE USER PROFILE NAME
-  Future<void> updateUserName(String name) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      await user.updateDisplayName(name);
-      // Force a local refresh of the user object
-      await user.reload();
-    }
-  }
-
   Future<String?> signUpWithEmail({
     required String email,
     required String password,
   }) async {
     try {
-      await _auth.createUserWithEmailAndPassword(
+      // 1. Create the user
+      UserCredential result = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
-      // Send verification email automatically upon sign up
-      await sendVerificationEmail();
+
+      // 2. Send verification email immediately
+      User? user = result.user;
+      if (user != null && !user.emailVerified) {
+        await user.sendEmailVerification();
+      }
+
       return null; // Return null means SUCCESS
     } on FirebaseAuthException catch (e) {
       return _handleAuthError(e);
@@ -58,6 +52,19 @@ class AuthService {
     }
   }
 
+  // --- PROFILE MANAGEMENT ---
+
+  // Updates the display name (Fixes the "RoleFlow User" issue)
+  Future<void> updateUserName(String name) async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      await user.updateDisplayName(name);
+      // Force a local refresh of the user object so UI updates instantly
+      await user.reload();
+    }
+  }
+
+  // Helper to manually send verification email if needed later
   Future<void> sendVerificationEmail() async {
     final user = _auth.currentUser;
     if (user != null && !user.emailVerified) {
@@ -100,8 +107,12 @@ class AuthService {
   // --- LOGOUT ---
 
   Future<void> signOut() async {
-    await _googleSignIn.signOut(); // Sign out of Google too
-    await _auth.signOut();
+    try {
+      await _googleSignIn.signOut(); // Sign out of Google too
+      await _auth.signOut();
+    } catch (e) {
+      print("Error signing out: $e");
+    }
   }
 
   // --- ERROR HANDLER ---
@@ -124,6 +135,8 @@ class AuthService {
         return 'Incorrect password. Please try again.';
       case 'invalid-credential':
         return 'Invalid credentials. Please try again.';
+      case 'network-request-failed':
+        return 'Network error. Please check your internet connection.';
       default:
         return 'Error: ${e.message}';
     }

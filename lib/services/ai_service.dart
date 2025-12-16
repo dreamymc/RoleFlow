@@ -2,13 +2,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:intl/intl.dart'; 
+import 'package:intl/intl.dart';
 import '../models/role.dart';
 
 // Helper class to store the summary + the "Fingerprint" of the data that generated it
 class _CachedSummary {
   final String text;
-  final String dataFingerprint; 
+  final String dataFingerprint;
 
   _CachedSummary(this.text, this.dataFingerprint);
 }
@@ -22,25 +22,21 @@ class AIService {
   final Map<String, _CachedSummary> _cache = {};
 
   // 2. CONFIGURATION
-  static final String _apiKey = dotenv.get('GEMINI_API_KEY'); 
-  
+  static final String _apiKey = dotenv.get('GEMINI_API_KEY');
+
   // Use the smart model
-  final _model = GenerativeModel(
-    model: 'gemini-2.5-flash', 
-    apiKey: _apiKey,
-  );
+  final _model = GenerativeModel(model: 'gemini-2.5-flash', apiKey: _apiKey);
 
   // 3. THE DEEP BRAIN ENGINE
   Future<String> generateRoleSummary(Role role) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return "Error: User not logged in.";
-      
-      // Get NOW in Local Time for accurate math
+
       final now = DateTime.now().toLocal();
 
       // --- STEP A: GATHER DEEP CONTEXT ---
-      
+
       // 1. Tasks (Pending)
       final taskSnap = await FirebaseFirestore.instance
           .collection('users')
@@ -60,9 +56,15 @@ class AIService {
           .collection('routines')
           .get();
 
+      // --- ZERO DATA GUARD (NEW) ---
+      // If there is absolutely nothing, skip the AI entirely.
+      if (taskSnap.docs.isEmpty && routineSnap.docs.isEmpty) {
+        return "This role is a blank canvas! Add some tasks or habits to generate insights.";
+      }
+
       // 3. Routine Logs (Mining for Context)
       StringBuffer logBuffer = StringBuffer();
-      
+
       for (var doc in routineSnap.docs) {
         final routineName = doc['title'];
         final logs = await doc.reference
@@ -70,7 +72,7 @@ class AIService {
             .orderBy('timestamp', descending: true)
             .limit(2)
             .get();
-        
+
         if (logs.docs.isNotEmpty) {
           logBuffer.writeln("Notes for '$routineName':");
           for (var log in logs.docs) {
@@ -83,38 +85,41 @@ class AIService {
       }
 
       // --- STEP B: GENERATE FINGERPRINT ---
-      // We build a string of all data to see if anything changed.
-      final taskListStr = taskSnap.docs.map((d) {
-        final deadline = (d['deadline'] as Timestamp).toDate().toLocal();
-        
-        // Calculate status explicitly in Dart
-        final todayStart = DateTime(now.year, now.month, now.day);
-        final deadlineStart = DateTime(deadline.year, deadline.month, deadline.day);
-        final diff = deadlineStart.difference(todayStart).inDays;
-        
-        String statusLabel;
-        if (diff < 0) {
-          statusLabel = "[URGENT: OVERDUE by ${diff.abs()} days!]";
-        } else if (diff == 0) {
-          statusLabel = "[DUE TODAY]";
-        } else {
-          statusLabel = "(Due in $diff days)";
-        }
+      final taskListStr = taskSnap.docs
+          .map((d) {
+            final deadline = (d['deadline'] as Timestamp).toDate().toLocal();
+            final todayStart = DateTime(now.year, now.month, now.day);
+            final deadlineStart = DateTime(
+              deadline.year,
+              deadline.month,
+              deadline.day,
+            );
+            final diff = deadlineStart.difference(todayStart).inDays;
 
-        return "- ${d['title']} $statusLabel";
-      }).join('\n');
+            String statusLabel;
+            if (diff < 0) {
+              statusLabel = "[URGENT: OVERDUE by ${diff.abs()} days!]";
+            } else if (diff == 0) {
+              statusLabel = "[DUE TODAY]";
+            } else {
+              statusLabel = "(Due in $diff days)";
+            }
 
-      final routineListStr = routineSnap.docs.map((d) => 
-        "${d['title']}-${d['count']}/${d['target']}"
-      ).join('|');
+            return "- ${d['title']} $statusLabel";
+          })
+          .join('\n');
+
+      final routineListStr = routineSnap.docs
+          .map((d) => "${d['title']}-${d['count']}/${d['target']}")
+          .join('|');
 
       final logsStr = logBuffer.toString();
 
-      // Create a unique ID for this exact state of data
-      final currentFingerprint = (taskListStr + routineListStr + logsStr).hashCode.toString();
+      final currentFingerprint = (taskListStr + routineListStr + logsStr)
+          .hashCode
+          .toString();
 
       // --- STEP C: CHECK DATABASE PERSISTENCE ---
-      // We check DB first. If it matches, we assume it's valid and load it.
       final roleDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -126,16 +131,16 @@ class AIService {
       final savedSummary = roleDoc.data()?['aiSummary'];
 
       if (savedFingerprint == currentFingerprint && savedSummary != null) {
-        // Update memory cache and return
         _cache[role.id] = _CachedSummary(savedSummary, currentFingerprint);
         print("🧠 Database Hit: Loading saved summary.");
-        return savedSummary; 
+        return savedSummary;
       }
 
-      print("🔌 Data Changed (or Error Retry). Calling Gemini API...");
+      print("🔌 Data Changed. Calling Gemini API...");
 
       // --- STEP D: THE PROMPT ---
-      final promptText = """
+      final promptText =
+          """
       You are analyzing the user's life role called '${role.name}'.
       
       CRITICAL INSTRUCTIONS:
@@ -163,38 +168,28 @@ class AIService {
       // --- STEP E: CALL API & SAVE ---
       final content = [Content.text(promptText)];
       final response = await _model.generateContent(content);
-      
-      // FIX: Only save if we actually got a real response
+
       if (response.text != null && response.text!.isNotEmpty) {
         final validText = response.text!;
-        
-        // Save to Database (ONLY SUCCESSES)
+
         await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('roles')
-          .doc(role.id)
-          .update({
-            'aiSummary': validText,
-            'aiFingerprint': currentFingerprint, // Only "lock" the fingerprint if we succeeded
-            'aiLastUpdated': FieldValue.serverTimestamp(),
-          });
-          
-         // Save to Memory
-         _cache[role.id] = _CachedSummary(validText, currentFingerprint);
-         
-         return validText;
+            .collection('users')
+            .doc(user.uid)
+            .collection('roles')
+            .doc(role.id)
+            .update({
+              'aiSummary': validText,
+              'aiFingerprint': currentFingerprint,
+              'aiLastUpdated': FieldValue.serverTimestamp(),
+            });
+
+        _cache[role.id] = _CachedSummary(validText, currentFingerprint);
+        return validText;
       } else {
-        // If empty, return error but DO NOT save it. 
-        // Next time user refreshes, it will try again.
         return "AI Response was empty. Tap refresh to try again.";
       }
-
     } catch (e) {
       print("AI Error: $e");
-      // CRITICAL: We DO NOT save errors to Firestore.
-      // This ensures the next time this runs, it sees the fingerprint mismatch 
-      // (or missing fingerprint) and tries again automatically.
       return "AI Service Unavailable. Tap refresh to try again.";
     }
   }
