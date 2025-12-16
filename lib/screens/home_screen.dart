@@ -179,7 +179,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- THE PROFILE STUDIO SHEET ---
+  // --- THE PROFILE STUDIO SHEET (FIXED SCROLL) ---
   void _showProfileStudio(User user, Map<String, dynamic> userData) {
     final nameCtrl = TextEditingController(
       text: userData['displayName'] ?? user.displayName ?? '',
@@ -198,7 +198,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true,
+      isScrollControlled: true, // Allows sheet to go full height
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -214,149 +214,190 @@ class _HomeScreenState extends State<HomeScreen> {
               bgImage = null;
             }
 
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                24,
-                24,
-                24,
-                MediaQuery.of(context).viewInsets.bottom + 24,
+            // FIX: Wrap everything in a constrained box or just rely on SingleChildScrollView
+            // coupled with the padding for the keyboard.
+            return Container(
+              height:
+                  MediaQuery.of(context).size.height *
+                  0.85, // Limit height to 85% of screen
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(
+                  context,
+                ).viewInsets.bottom, // Keyboard padding
               ),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    "Profile Studio",
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  // 1. DRAG HANDLE (Optional visual cue)
+                  const SizedBox(height: 12),
+                  Container(
+                    width: 40,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
-                  const SizedBox(height: 20),
 
-                  // AVATAR UPLOADER
-                  Center(
-                    child: GestureDetector(
-                      onTap: () async {
-                        final picker = ImagePicker();
-                        final XFile? image = await picker.pickImage(
-                          source: ImageSource.gallery,
-                        );
-
-                        if (image != null) {
-                          setSheetState(() => isUploading = true);
-                          String? url = await CloudinaryService().uploadImage(
-                            File(image.path),
-                          );
-
-                          if (url != null) {
-                            setSheetState(() {
-                              newUploadedURL = url;
-                              isUploading = false;
-                            });
-                          } else {
-                            setSheetState(() => isUploading = false);
-                          }
-                        }
-                      },
-                      child: Stack(
+                  // 2. SCROLLABLE CONTENT
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          CircleAvatar(
-                            radius: 50,
-                            backgroundColor: Colors.grey[200],
-                            backgroundImage: bgImage,
-                            child: isUploading
-                                ? const CircularProgressIndicator()
-                                : (bgImage == null
-                                      ? const Icon(
-                                          Icons.person,
-                                          size: 50,
-                                          color: Colors.grey,
-                                        )
-                                      : null),
+                          const Text(
+                            "Profile Studio",
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: const BoxDecoration(
-                                color: Colors.black,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.camera_alt,
-                                color: Colors.white,
-                                size: 20,
+                          const SizedBox(height: 20),
+
+                          // AVATAR UPLOADER
+                          Center(
+                            child: GestureDetector(
+                              onTap: () async {
+                                final picker = ImagePicker();
+                                final XFile? image = await picker.pickImage(
+                                  source: ImageSource.gallery,
+                                );
+
+                                if (image != null) {
+                                  setSheetState(() => isUploading = true);
+                                  String? url = await CloudinaryService()
+                                      .uploadImage(File(image.path));
+
+                                  if (url != null) {
+                                    setSheetState(() {
+                                      newUploadedURL = url;
+                                      isUploading = false;
+                                    });
+                                  } else {
+                                    setSheetState(() => isUploading = false);
+                                  }
+                                }
+                              },
+                              child: Stack(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 50,
+                                    backgroundColor: Colors.grey[200],
+                                    backgroundImage: bgImage,
+                                    child: isUploading
+                                        ? const CircularProgressIndicator()
+                                        : (bgImage == null
+                                              ? const Icon(
+                                                  Icons.person,
+                                                  size: 50,
+                                                  color: Colors.grey,
+                                                )
+                                              : null),
+                                  ),
+                                  Positioned(
+                                    bottom: 0,
+                                    right: 0,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: const BoxDecoration(
+                                        color: Colors.black,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.camera_alt,
+                                        color: Colors.white,
+                                        size: 20,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
+                          const SizedBox(height: 24),
+
+                          // IDENTITY
+                          TextField(
+                            controller: nameCtrl,
+                            decoration: const InputDecoration(
+                              labelText: "Display Name",
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: greetingCtrl,
+                            decoration: const InputDecoration(
+                              labelText: "Greeting Message",
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+
+                          // THEME
+                          const Text(
+                            "Theme Customization",
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 12),
+
+                          _buildProColorRow(
+                            context,
+                            "Background",
+                            tempBgColor,
+                            (c) {
+                              setSheetState(() => tempBgColor = c);
+                            },
+                          ),
+                          const SizedBox(height: 12),
+
+                          _buildProColorRow(
+                            context,
+                            "Text Color",
+                            tempTextColor,
+                            (c) {
+                              setSheetState(() => tempTextColor = c);
+                            },
+                          ),
+
+                          const SizedBox(height: 32),
+
+                          // SAVE BUTTON
+                          SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: FilledButton(
+                              onPressed: () async {
+                                Map<String, dynamic> updateData = {
+                                  'displayName': nameCtrl.text.trim(),
+                                  'greeting': greetingCtrl.text.trim(),
+                                  'backgroundColor': tempBgColor.value,
+                                  'textColor': tempTextColor.value,
+                                };
+
+                                if (newUploadedURL != null) {
+                                  updateData['photoURL'] = newUploadedURL;
+                                  await user.updatePhotoURL(newUploadedURL);
+                                }
+
+                                await FirebaseFirestore.instance
+                                    .collection('users')
+                                    .doc(user.uid)
+                                    .set(updateData, SetOptions(merge: true));
+
+                                await user.updateDisplayName(
+                                  nameCtrl.text.trim(),
+                                );
+
+                                if (mounted) Navigator.pop(context);
+                              },
+                              child: const Text("Save Changes"),
+                            ),
+                          ),
+                          // Extra space at bottom for scrolling comfort
+                          const SizedBox(height: 20),
                         ],
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // IDENTITY
-                  TextField(
-                    controller: nameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: "Display Name",
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: greetingCtrl,
-                    decoration: const InputDecoration(
-                      labelText: "Greeting Message",
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // THEME
-                  const Text(
-                    "Theme Customization",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-
-                  _buildProColorRow(context, "Background", tempBgColor, (c) {
-                    setSheetState(() => tempBgColor = c);
-                  }),
-                  const SizedBox(height: 12),
-
-                  _buildProColorRow(context, "Text Color", tempTextColor, (c) {
-                    setSheetState(() => tempTextColor = c);
-                  }),
-
-                  const SizedBox(height: 32),
-
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: FilledButton(
-                      onPressed: () async {
-                        Map<String, dynamic> updateData = {
-                          'displayName': nameCtrl.text.trim(),
-                          'greeting': greetingCtrl.text.trim(),
-                          'backgroundColor': tempBgColor.value,
-                          'textColor': tempTextColor.value,
-                        };
-
-                        if (newUploadedURL != null) {
-                          updateData['photoURL'] = newUploadedURL;
-                          await user.updatePhotoURL(newUploadedURL);
-                        }
-
-                        await FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(user.uid)
-                            .set(updateData, SetOptions(merge: true));
-
-                        await user.updateDisplayName(nameCtrl.text.trim());
-
-                        if (mounted) Navigator.pop(context);
-                      },
-                      child: const Text("Save Changes"),
                     ),
                   ),
                 ],
